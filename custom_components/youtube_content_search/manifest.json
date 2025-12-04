@@ -2,7 +2,7 @@
   "domain": "youtube_content_search",
   "name": "YouTube 콘텐츠 검색기",
   "version": "0.1.0",
-  "documentation": "https://developers.google.com/youtube/v3",
+  "documentation": "https://github.com/plplaaa2/youtube_search_n_play",
   "codeowners": ["@plplaaa2"],
   "config_flow": true
 }
