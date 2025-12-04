@@ -14,7 +14,14 @@ This custom Home Assistant integration allows you to search for YouTube videos o
 
 # Usage
  - Install the integration under custom_components/youtube_content_search
+  <img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/27542206-8f3a-40ca-bdaf-778278df8aed" />
+  
  - Configure your API key in Home Assistant
- - Call the service youtube_content_search.search_play with:
+   
+ <img width="378" height="233" alt="image" src="https://github.com/user-attachments/assets/7a456180-f1ca-4fac-8457-22aec0756760" />
+
+ - Call the action youtube_content_search.search_play with:
+  
  - query: search keyword (required)
  - entity_id: target media player (required)
+
