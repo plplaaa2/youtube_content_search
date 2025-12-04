@@ -1,0 +1,8 @@
+{
+  "domain": "youtube_content_search",
+  "name": "YouTube 콘텐츠 검색기",
+  "version": "0.1.0",
+  "documentation": "https://developers.google.com/youtube/v3",
+  "codeowners": ["@yourgithubid"],
+  "config_flow": true
+}
