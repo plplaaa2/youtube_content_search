@@ -27,3 +27,7 @@ This custom Home Assistant integration allows you to search for YouTube videos o
 
  - query: search keyword (required)
  - entity_id: target media player (required)
+
+
+## 후원
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/plplaaa2)
