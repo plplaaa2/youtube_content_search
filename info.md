@@ -1,29 +1,18 @@
-# Youtube Search & Play
+# YouTube Content Search 1.0.1
 
-This custom Home Assistant integration allows you to search for YouTube videos or playlists and cast them directly to supported media players (Nest Hub, Chromecast, smart TVs with Cast support).
+Search YouTube videos with the YouTube Data API and request playback on Google Cast media players from Home Assistant actions or a compatible LLM conversation agent.
 
-# Features
- - Search YouTube by keyword using the YouTube Data API
- - Automatically detect whether the result is a video or playlist
- - Cast content to your chosen media player using the proper JSON payload
- - Works seamlessly with Home Assistant scripts and automations
+## Features
 
-# Requirements
- - A valid YouTube Data API key
- - A Cast‑enabled device (e.g., Nest Hub, Chromecast, Cast‑enabled TV)
+- Exposes a selectable **YouTube Content Search** LLM API for conversation agent tool providers.
+- Restricts Assist discovery and playback actions to available, Assist-exposed entities provided by the Google Cast integration.
+- Rejects non-Cast and unregistered media players before making a YouTube API request.
+- Saves YouTube video metadata in persistent Home Assistant playlists.
 
-# Usage
- - Install the integration under custom_components/youtube_content_search
-  <img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/27542206-8f3a-40ca-bdaf-778278df8aed" />
-  
- - Configure your API key in Home Assistant
-   
- <img width="378" height="233" alt="image" src="https://github.com/user-attachments/assets/7a456180-f1ca-4fac-8457-22aec0756760" />
+## Requirements
 
- - Restart Home Assistant
-   
- - Call the action youtube_content_search.search_play with:
-  <img width="470" height="743" alt="image" src="https://github.com/user-attachments/assets/acbbc7e4-f6d7-42aa-a823-926ee1faaa32" />
+- Home Assistant with a compatible LLM conversation agent for voice or chat tool use.
+- A YouTube Data API v3 key configured in the integration.
+- A Google Cast media player that supports the YouTube app.
 
- - query: search keyword (required)
- - entity_id: target media player (required)
+After updating to 1.0.1 and restarting Home Assistant, select **YouTube Content Search** in the conversation agent's **Tool providers** or **LLM API** settings. See [README](README.md) for setup details.
