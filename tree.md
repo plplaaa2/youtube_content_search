@@ -5,6 +5,8 @@ HA service integration with Assist LLM tools. Frontend and legacy backup assets 
 ```text
 LICENSE
 README.md
+caution.jsonl
+changelog.jsonl
 custom_components/youtube_content_search/__init__.py
 custom_components/youtube_content_search/config_flow.py
 custom_components/youtube_content_search/const.py
