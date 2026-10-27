@@ -31,13 +31,23 @@ Home Assistant 액션으로 YouTube 영상을 검색하고 재생합니다.
 3. HA를 재시작하고 설정 → 기기 및 서비스 → 통합 추가에서 YouTube Content Search를 선택합니다.
 4. 설정 화면에 API 키와 재생 방식을 입력합니다. 옵션 변경은 이후 액션 호출부터 적용됩니다.
 
+### 재생 방식
+
+통합 설정에서 다음 방식 중 하나를 선택합니다.
+
+- **공식 YouTube 앱 → Cast fallback**: TV의 YouTube 앱 링크를 실행하고 Android TV Remote 액션이 오류를 반환하면 Cast 재생을 요청합니다.
+- **SmartTube → Cast fallback**: SmartTube의 `vnd.youtube.launch` 링크를 실행하고 Android TV Remote 액션이 오류를 반환하면 Cast 재생을 요청합니다.
+- **Google Cast만**: Android TV Remote 없이 Google Cast `media_player`로 바로 재생을 요청합니다.
+
+두 앱 링크 방식은 Android TV Remote `remote` 엔티티와 Google Cast `media_player` fallback 대상이 모두 필요합니다. Cast 단독 방식에서는 `entity_id`에 Cast 플레이어를 지정합니다. fallback은 Remote 액션이 오류를 반환할 때 시도되며, TV 앱이 오류 없이 열리지 않는 모든 상황을 감지하지는 못합니다. SmartTube를 사용하려면 TV에 앱을 설치하고 YouTube 링크 기본 앱으로 지정해야 할 수 있습니다.
+
 키는 HA 설정 엔트리에 저장되며, 이 통합은 별도 암호화 저장을 제공하지 않습니다.
 자동화 YAML에 실제 키를 넣을 필요는 없습니다.
 
 ## 검색 후 재생
 
 개발자 도구 → 액션 또는 자동화/스크립트에서 호출합니다.
-영상 검색의 첫 결과를 재생합니다. 재생목록 검색은 지원하지 않습니다. 설정에서 **공식 YouTube 앱 → Cast fallback**, **SmartTube → Cast fallback**, Google Cast만 재생 중 하나를 선택합니다. 기본값은 SmartTube 링크를 먼저 시도한 뒤 실패하면 Cast로 요청합니다.
+검색어로 찾은 첫 영상을 재생합니다. 재생 대상 엔티티는 선택한 설정 방식에 따라 달라집니다.
 앱 링크 방식은 Android TV Remote의 `remote` 엔티티와 Google Cast의 `media_player`를 모두 지정해야 합니다. `entity_id`에는 remote, `cast_entity_id`에는 fallback Cast 플레이어를 사용합니다. SmartTube는 YouTube 딥링크로 열며, TV의 앱 선택 화면에서 SmartTube를 기본 앱으로 지정해야 할 수 있습니다.
 
 ```yaml
@@ -48,7 +58,7 @@ data:
   cast_entity_id: media_player.living_room_tv
 ```
 
-검색 없이 특정 영상을 재생하려면 `query` 대신 `video`에 YouTube 영상 URL 또는 11자리 영상 ID를 지정합니다. `query`와 `video`는 둘 중 하나만 입력합니다.
+검색 없이 재생하려면 `query` 대신 `video`에 YouTube 영상 URL, 11자리 영상 ID 또는 재생목록 URL을 지정합니다. 재생목록은 첫 번째 재생 가능한 영상을 찾은 뒤 목록 ID도 플레이어에 전달해 이어서 재생하도록 요청합니다. `query`와 `video`는 둘 중 하나만 입력합니다. API 키만으로는 비공개 재생목록에 접근하지 못할 수 있으며, 실제 연속 재생은 TV와 YouTube 앱 버전에 따라 달라질 수 있습니다.
 
 ```yaml
 action: youtube_content_search.search_play

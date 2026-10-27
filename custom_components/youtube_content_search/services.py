@@ -229,6 +229,21 @@ def _video_id_from_input(value: str) -> str:
     return candidate
 
 
+def _playlist_id_from_input(value: str) -> Optional[str]:
+    """Extract a playlist ID from a supported YouTube playlist URL."""
+    try:
+        parsed = urllib.parse.urlsplit(value.strip())
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme not in ("http", "https") or host not in {
+            "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
+        }:
+            return None
+        playlist_id = urllib.parse.parse_qs(parsed.query).get("list", [""])[0]
+        return playlist_id if re.fullmatch(r"[A-Za-z0-9_-]{10,100}", playlist_id) else None
+    except (ValueError, UnicodeError):
+        return None
+
+
 # Validate selected playback targets before API requests; related: llm.py/services.yaml.
 async def async_search_play(hass: HomeAssistant, call: ServiceCall):
     """Search for or directly select one video and dispatch via configured playback mode."""
@@ -242,8 +257,19 @@ async def async_search_play(hass: HomeAssistant, call: ServiceCall):
     if not valid_target:
         message = "Choose a remote provided by Android TV Remote" if app_link_mode else "Choose a media player provided by Google Cast"
         raise ServiceValidationError(message)
+    playlist_id = None
     if video:
-        video_id = _video_id_from_input(video)
+        playlist_id = _playlist_id_from_input(video)
+        if playlist_id:
+            data = await _async_youtube_request(hass, "playlistItems", {
+                "part": "contentDetails", "playlistId": playlist_id, "maxResults": 1,
+            })
+            items = data.get("items") or []
+            video_id = (items[0].get("contentDetails") or {}).get("videoId") if items else None
+            if not isinstance(video_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+                raise HomeAssistantError("No playable video found in the YouTube playlist")
+        else:
+            video_id = _video_id_from_input(video)
     else:
         data = await _async_youtube_request(hass, "search", {
             "part": "snippet", "type": "video", "maxResults": 1, "q": query,
@@ -254,8 +280,12 @@ async def async_search_play(hass: HomeAssistant, call: ServiceCall):
         video_id = items[0]["id"]["videoId"]
     if app_link_mode:
         activity = f"https://www.youtube.com/watch?v={video_id}"
+        if playlist_id:
+            activity += f"&list={urllib.parse.quote(playlist_id)}"
         if mode in (PLAYBACK_MODE_SMARTTUBE, PLAYBACK_MODE_CAST_FALLBACK):
             activity = f"vnd.youtube.launch://www.youtube.com/watch?v={video_id}"
+            if playlist_id:
+                activity += f"&list={urllib.parse.quote(playlist_id)}"
         try:
             await hass.services.async_call(
                 "remote", "turn_on", {
@@ -273,13 +303,15 @@ async def async_search_play(hass: HomeAssistant, call: ServiceCall):
                     "App-link playback failed; configure a valid Cast fallback entity"
                 ) from None
             _LOGGER.warning("Android TV app-link playback failed; trying Google Cast fallback")
-            await _async_cast_play(hass, cast_entity, video_id)
+            await _async_cast_play(hass, cast_entity, video_id, playlist_id)
             return
-    await _async_cast_play(hass, call.data["entity_id"], video_id)
+    await _async_cast_play(hass, call.data["entity_id"], video_id, playlist_id)
 
 
 # Keep Cast dispatch shared by the direct and fallback playback paths; related: async_search_play.
-async def _async_cast_play(hass: HomeAssistant, entity_id: str, video_id: str) -> None:
+async def _async_cast_play(
+    hass: HomeAssistant, entity_id: str, video_id: str, playlist_id: Optional[str] = None,
+) -> None:
     """Send a YouTube Cast request for one validated video ID."""
     await hass.services.async_call(
         "media_player", "play_media", {
@@ -287,6 +319,7 @@ async def _async_cast_play(hass: HomeAssistant, entity_id: str, video_id: str) -
             "media_content_type": "cast",
             "media_content_id": _json_module.dumps({
                 "app_name": "youtube", "media_id": video_id,
+                **({"playlist_id": playlist_id} if playlist_id else {}),
             }),
         }, blocking=True,
     )

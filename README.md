@@ -30,11 +30,21 @@ Copy only the `custom_components/youtube_content_search` folder to `/config/cust
 3. Restart Home Assistant, then add YouTube Content Search from **Settings → Devices & services → Add integration**.
 4. Enter the API key and playback mode in the integration configuration. Option changes apply to subsequent actions.
 
+### Playback modes
+
+Choose one of these modes in the integration configuration:
+
+- **Official YouTube app → Cast fallback**: open the video in the TV's YouTube app; send a Cast request if Android TV Remote reports an error.
+- **SmartTube → Cast fallback**: open the video with SmartTube's `vnd.youtube.launch` link; send a Cast request if Android TV Remote reports an error.
+- **Google Cast only**: send the video directly to a Google Cast `media_player`, without Android TV Remote.
+
+Both app-link modes require an Android TV Remote `remote` entity and a Google Cast `media_player` fallback. The Cast-only mode uses the Cast player as `entity_id`. A fallback is attempted when the remote action returns an error; it cannot detect every case where a TV app silently fails to open. For SmartTube, install the app on the TV and set it as the default handler for YouTube links if Android TV asks.
+
 The key is stored in the Home Assistant config entry; this integration does not provide additional encryption. You do not need to put the actual key in automation YAML.
 
 ## Search and play
 
-Call the action from **Developer tools → Actions**, an automation, or a script. It plays the first matching video; playlist search is not supported. Select official YouTube app to Cast fallback, SmartTube to Cast fallback, or Google Cast only in the integration options. App-link modes request Cast playback if the remote action returns an error.
+Call the action from **Developer tools → Actions**, an automation, or a script. It plays the first matching search result; the selected playback mode determines whether `entity_id` is a Cast player or an Android TV Remote entity.
 
 Android TV app modes send a video deep link to an Android TV Remote `remote` entity and use `cast_entity_id` for the Google Cast `media_player` fallback. SmartTube mode uses its `vnd.youtube.launch` link. Deep-link handling can vary by device and app version.
 
@@ -45,7 +55,7 @@ data:
   entity_id: media_player.living_room_tv # use remote.living_room_tv for app-link mode
 ```
 
-To play a specific video without searching, use `video` with a YouTube video URL or 11-character video ID instead of `query`. Provide exactly one of `query` or `video`.
+To play without searching, use `video` with a YouTube video URL, 11-character video ID, or playlist URL instead of `query`. For a playlist, the integration resolves its first playable video and passes the playlist ID to YouTube so playback can continue through the list. Playlist lookup uses the YouTube Data API, so private playlists may be inaccessible with an API key alone. App behavior can vary by TV and YouTube app version.
 
 ```yaml
 action: youtube_content_search.search_play

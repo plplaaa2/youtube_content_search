@@ -376,10 +376,49 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
                     {"app_name": "youtube", "media_id": "dQw4w9WgXcQ"},
                 )
 
+    async def test_playlist_url_plays_first_item_through_existing_playback(self):
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={
+            "items": [{"contentDetails": {"videoId": "dQw4w9WgXcQ"}}],
+        })) as request:
+            await self.hass.services.invoke("search_play", {
+                "video": "https://www.youtube.com/playlist?list=PL1234567890",
+                "entity_id": "media_player.tv",
+            })
+        request.assert_awaited_once_with(self.hass, "playlistItems", {
+            "part": "contentDetails", "playlistId": "PL1234567890", "maxResults": 1,
+        })
+        self.assertEqual(
+            json.loads(self.hass.services.async_call.call_args.args[2]["media_content_id"]),
+            {"app_name": "youtube", "media_id": "dQw4w9WgXcQ", "playlist_id": "PL1234567890"},
+        )
+
+    async def test_playlist_url_passes_list_to_smarttube_deep_link(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "smarttube_fallback"
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={
+            "items": [{"contentDetails": {"videoId": "dQw4w9WgXcQ"}}],
+        })):
+            await self.hass.services.invoke("search_play", {
+                "video": "https://www.youtube.com/playlist?list=PL1234567890",
+                "entity_id": "remote.tv", "cast_entity_id": "media_player.tv",
+            })
+        self.assertEqual(
+            self.hass.services.async_call.call_args.args[2]["activity"],
+            "vnd.youtube.launch://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890",
+        )
+
+    async def test_empty_playlist_reports_no_playable_video(self):
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": []})):
+            with self.assertRaisesRegex(HAError, "No playable video found"):
+                await self.hass.services.invoke("search_play", {
+                    "video": "https://youtube.com/playlist?list=PL1234567890",
+                    "entity_id": "media_player.tv",
+                })
+        self.hass.services.async_call.assert_not_awaited()
+
     async def test_direct_video_input_validation_and_query_exclusivity(self):
         for data in [
             {"video": "https://example.com/watch?v=dQw4w9WgXcQ", "entity_id": "media_player.tv"},
-            {"video": "https://youtube.com/playlist?list=PL123", "entity_id": "media_player.tv"},
+            {"video": "https://youtube.com/playlist?list=short", "entity_id": "media_player.tv"},
             {"video": "too-short", "entity_id": "media_player.tv"},
             {"query": "music", "video": "dQw4w9WgXcQ", "entity_id": "media_player.tv"},
             {"entity_id": "media_player.tv"},
