@@ -19,7 +19,6 @@ custom_components/youtube_content_search/frontend/panel.js
 custom_components/youtube_content_search/frontend/styles.css
 custom_components/youtube_content_search/manifest.json
 custom_components/youtube_content_search/options_flow.py
-custom_components/youtube_content_search/playlist_store.py
 custom_components/youtube_content_search/services.py
 custom_components/youtube_content_search/services.yaml
 custom_components/youtube_content_search/translations/en.json

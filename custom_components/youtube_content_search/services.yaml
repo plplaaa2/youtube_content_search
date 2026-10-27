@@ -1,6 +1,6 @@
 search_play:
   name: YouTube 검색 재생
-  description: 검색어로 YouTube 영상을 찾거나 영상 URL/ID로 지정해 Google Cast 기기에서 재생합니다. query와 video 중 하나만 입력하세요.
+  description: 검색어로 YouTube 영상을 찾거나 영상 URL/ID로 지정해 설정한 앱 링크 후 Cast fallback 또는 Cast만 재생합니다. query와 video 중 하나만 입력하세요.
   fields:
     query:
       name: 검색어
@@ -17,42 +17,20 @@ search_play:
       selector:
         text:
     entity_id:
-      name: 미디어 플레이어
-      description: YouTube Cast 재생을 지원하는 미디어 플레이어를 선택하세요.
+      name: 재생 대상
+      description: 앱 링크 모드에서는 Android TV Remote 리모컨, Cast 전용 모드에서는 Cast 플레이어를 지정하세요.
       required: true
+      selector:
+        entity:
+          filter:
+            - domain: remote
+              integration: androidtv_remote
+    cast_entity_id:
+      name: Cast fallback 대상
+      description: 앱 링크가 실패했을 때 사용할 Google Cast 미디어 플레이어입니다. 앱 링크 모드에서 필요합니다.
+      required: false
       selector:
         entity:
           filter:
             - domain: media_player
               integration: cast
-
-playlist_save:
-  name: 플레이리스트에 동영상 추가
-  description: 영상 정보를 조회해 HA 내부 재생목록에 영구 저장합니다. YouTube 계정은 변경하지 않으며 HA 재시작 후에도 복원됩니다.
-  fields:
-    video_ids:
-      name: 영상 ID 목록
-      description: 플레이리스트에 추가할 YouTube 영상 ID (쉼표 구분 또는 YAML 목록)
-      required: true
-      example: dQw4w9WgXcQ,jNQXAC9IVRw
-      selector:
-        text:
-    playlist_id:
-      name: 플레이리스트 ID
-      description: 저장할 플레이리스트의 고유한 ID
-      required: true
-      example: my-playlist-001
-      selector:
-        text:
-
-playlist_delete:
-  name: 플레이리스트 삭제
-  description: 지정된 HA 내부 재생목록을 영구 삭제합니다. YouTube 계정은 변경하지 않습니다.
-  fields:
-    id:
-      name: 플레이리스트 ID
-      description: 삭제할 플레이리스트의 고유한 ID
-      required: true
-      example: my-playlist-001
-      selector:
-        text:

@@ -8,7 +8,6 @@ Search YouTube videos with the YouTube Data API and request playback on Google C
 - Uses the Google Cast integration criterion for both Assist discovery and action playback targets.
 - Rejects non-Cast and unregistered media players before making a YouTube API request.
 - Plays a selected YouTube video directly from a supported video URL or 11-character video ID.
-- Saves YouTube video metadata in persistent Home Assistant playlists.
 
 ## Requirements
 

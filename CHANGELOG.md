@@ -2,6 +2,11 @@
 
 Notable changes to YouTube Content Search are documented here.
 
+## [Unreleased] - 2026-10-27
+
+- Remove Netflix title and episode playback from this integration.
+- Remove Home Assistant playlist save, delete, and persistence features.
+
 ## [1.1.0] - 2026-10-18
 
 - Play a specific YouTube video directly from a supported video URL or 11-character video ID in actions and Assist tools.
