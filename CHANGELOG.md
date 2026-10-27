@@ -2,10 +2,6 @@
 
 Notable changes to YouTube Content Search are documented here.
 
-## [Unreleased]
-
-- Start the selected first playlist item automatically after opening a playlist in SmartTube mode.
-
 ## [1.2.0] - 2026-10-27
 
 - Add playback modes for the official YouTube app, SmartTube, and Google Cast, including Cast fallback for app links.
