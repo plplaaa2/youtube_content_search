@@ -5,7 +5,7 @@
 [Changelog](CHANGELOG.md)
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-![version](https://img.shields.io/badge/version-v1.1.0-blue.svg?style=for-the-badge)
+![version](https://img.shields.io/badge/version-v1.2.0-blue.svg?style=for-the-badge)
 [![kofi](https://img.shields.io/badge/Ko--fi-Support%20Me-F16061?style=for-the-badge&logo=ko-fi)](https://ko-fi.com/plplaaa2)
 
 Search and play YouTube videos through Home Assistant actions.

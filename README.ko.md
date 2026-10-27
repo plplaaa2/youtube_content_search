@@ -5,7 +5,7 @@
 [변경 기록](CHANGELOG.md)
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-![version](https://img.shields.io/badge/version-v1.1.0-blue.svg?style=for-the-badge)
+![version](https://img.shields.io/badge/version-v1.2.0-blue.svg?style=for-the-badge)
 [![kofi](https://img.shields.io/badge/Ko--fi-Support%20Me-F16061?style=for-the-badge&logo=ko-fi)](https://ko-fi.com/plplaaa2)
 
 Home Assistant 액션으로 YouTube 영상을 검색하고 재생합니다.
@@ -111,7 +111,7 @@ python -B -m unittest discover -s tests -v
 
 테스트는 HA 인터페이스를 모의 구현합니다.
 실제 HA Store 동작·설정 로딩·API 인증·TV 앱 링크 재생은 별도 확인이 필요합니다.
-외부 통합 버전은 `1.1.0`입니다.
+외부 통합 버전은 `1.2.0`입니다.
 HACS 검증 GitHub Action은 push, pull request, 매일 정기 실행, 수동 실행 시 저장소를 통합 카테고리로 검증합니다.
 
 ## 공식 참고 자료

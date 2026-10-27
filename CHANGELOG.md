@@ -2,9 +2,10 @@
 
 Notable changes to YouTube Content Search are documented here.
 
-## [Unreleased] - 2026-10-27
+## [1.2.0] - 2026-10-27
 
-- Remove Netflix title and episode playback from this integration.
+- Add playback modes for the official YouTube app, SmartTube, and Google Cast, including Cast fallback for app links.
+- Support YouTube playlist URLs and pass the playlist ID to the player to request continued playback.
 - Remove Home Assistant playlist save, delete, and persistence features.
 
 ## [1.1.0] - 2026-10-18
