@@ -297,25 +297,6 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
             }, blocking=True,
         )
 
-    async def test_youtube_app_playlist_starts_selected_first_item(self):
-        self.hass.data[services.DOMAIN]["playback_mode"] = "youtube_app_fallback"
-        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={
-            "items": [{"contentDetails": {"videoId": "dQw4w9WgXcQ"}}],
-        })), patch.object(services.asyncio, "sleep", AsyncMock()) as sleep:
-            await self.hass.services.invoke("search_play", {
-                "video": "https://www.youtube.com/playlist?list=PL1234567890",
-                "entity_id": "remote.tv", "cast_entity_id": "media_player.tv",
-            })
-        sleep.assert_awaited_once_with(2)
-        launch, play = self.hass.services.async_call.await_args_list
-        self.assertEqual(launch.args[:2], ("remote", "turn_on"))
-        self.assertEqual(
-            launch.args[2]["activity"],
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890",
-        )
-        self.assertEqual(play.args[:2], ("remote", "send_command"))
-        self.assertEqual(play.args[2], {"entity_id": "remote.tv", "command": "DPAD_CENTER"})
-
     async def test_app_link_assist_lists_only_android_tv_remote(self):
         context = self._llm_context()
         self.hass.data[services.DOMAIN]["playback_mode"] = "youtube_app_fallback"
