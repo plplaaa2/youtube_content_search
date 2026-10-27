@@ -244,7 +244,7 @@ def _playlist_id_from_input(value: str) -> Optional[str]:
         return None
 
 
-# Validate selected playback targets before API requests; related: llm.py/services.yaml.
+# Validate targets and start the selected SmartTube playlist item; related: llm.py/services.yaml and tests/test_service_only.py.
 async def async_search_play(hass: HomeAssistant, call: ServiceCall):
     """Search for or directly select one video and dispatch via configured playback mode."""
     query = (call.data.get("query") or "").strip()
@@ -293,6 +293,15 @@ async def async_search_play(hass: HomeAssistant, call: ServiceCall):
                     "activity": activity,
                 }, blocking=True,
             )
+            if playlist_id and mode in (PLAYBACK_MODE_SMARTTUBE, PLAYBACK_MODE_CAST_FALLBACK):
+                # SmartTube opens playlist links on the list screen; activate its selected first item.
+                await asyncio.sleep(2)
+                await hass.services.async_call(
+                    "remote", "send_command", {
+                        "entity_id": call.data["entity_id"],
+                        "command": "DPAD_CENTER",
+                    }, blocking=True,
+                )
             return
         except HomeAssistantError:
             if mode not in (PLAYBACK_MODE_APP_LINKS + (PLAYBACK_MODE_CAST_FALLBACK,)):
