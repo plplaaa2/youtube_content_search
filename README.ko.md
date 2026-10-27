@@ -58,7 +58,7 @@ data:
   cast_entity_id: media_player.living_room_tv
 ```
 
-검색 없이 재생하려면 `query` 대신 `video`에 YouTube 영상 URL, 11자리 영상 ID 또는 재생목록 URL을 지정합니다. 재생목록은 첫 번째 재생 가능한 영상을 찾고 목록 ID와 함께 플레이어에 전달합니다. SmartTube 모드에서는 재생목록 화면을 연 뒤 2초 후 선택된 항목을 눌러 재생을 시작합니다. `query`와 `video`는 둘 중 하나만 입력합니다. API 키만으로는 비공개 재생목록에 접근하지 못할 수 있으며, 실제 연속 재생은 TV와 YouTube 앱 버전에 따라 달라질 수 있습니다.
+검색 없이 재생하려면 `query` 대신 `video`에 YouTube 영상 URL, 11자리 영상 ID 또는 재생목록 URL을 지정합니다. 재생목록은 첫 번째 재생 가능한 영상을 찾고 목록 ID와 함께 플레이어에 전달합니다. 공식 YouTube 앱과 SmartTube 모드에서는 재생목록 화면을 연 뒤 2초 후 선택된 항목을 눌러 재생을 시작합니다. `query`와 `video`는 둘 중 하나만 입력합니다. API 키만으로는 비공개 재생목록에 접근하지 못할 수 있으며, 실제 연속 재생은 TV와 YouTube 앱 버전에 따라 달라질 수 있습니다.
 
 ```yaml
 action: youtube_content_search.search_play

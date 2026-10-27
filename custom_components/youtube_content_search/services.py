@@ -293,8 +293,8 @@ async def async_search_play(hass: HomeAssistant, call: ServiceCall):
                     "activity": activity,
                 }, blocking=True,
             )
-            if playlist_id and mode in (PLAYBACK_MODE_SMARTTUBE, PLAYBACK_MODE_CAST_FALLBACK):
-                # SmartTube opens playlist links on the list screen; activate its selected first item.
+            if playlist_id and mode in PLAYBACK_MODE_APP_LINKS + (PLAYBACK_MODE_CAST_FALLBACK,):
+                # App links can open a playlist without starting its selected item; activate it after the screen loads.
                 await asyncio.sleep(2)
                 await hass.services.async_call(
                     "remote", "send_command", {
