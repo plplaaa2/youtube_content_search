@@ -5,8 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 
-from .const import CONF_API_KEY, DOMAIN
-from .playlist_store import DATA_PLAYLIST_STORE, PlaylistStore
+from .const import CONF_API_KEY, CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE, DOMAIN
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,13 +17,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     api_key = config_entry.options.get(CONF_API_KEY, config_entry.data.get(CONF_API_KEY))
     if not isinstance(api_key, str) or not api_key.strip():
         raise ConfigEntryError("YouTube API key is required")
-    # Restore local playlists before enabling actions; related: playlist_store.py.
-    runtime = hass.data.setdefault(DOMAIN, {})
-    if DATA_PLAYLIST_STORE not in runtime:
-        playlists = PlaylistStore(hass)
-        await playlists.async_load()
-        runtime[DATA_PLAYLIST_STORE] = playlists
     hass.data.setdefault(DOMAIN, {})[CONF_API_KEY] = api_key.strip()
+    hass.data[DOMAIN][CONF_PLAYBACK_MODE] = _entry_playback_mode(config_entry)
     # Register a selectable LLM tool provider on every supported HA; related: llm.py.
     from .llm import async_register_api
 
@@ -34,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     return True
 
 
-# Apply options without reloading playlists; related: config_flow.py.
+# Apply updated credentials; related: config_flow.py.
 async def _async_update_options(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
     """Apply updated credentials to subsequent service calls."""
     await async_setup_entry_credentials(hass, config_entry)
@@ -46,6 +40,16 @@ async def async_setup_entry_credentials(hass: HomeAssistant, config_entry: Confi
     if not isinstance(api_key, str) or not api_key.strip():
         raise ConfigEntryError("YouTube API key is required")
     hass.data.setdefault(DOMAIN, {})[CONF_API_KEY] = api_key.strip()
+    hass.data[DOMAIN][CONF_PLAYBACK_MODE] = _entry_playback_mode(config_entry)
+
+
+# Legacy entries without a playback option retain the original Cast behavior.
+def _entry_playback_mode(config_entry: ConfigEntry) -> str:
+    """Resolve the configured mode while keeping pre-mode entries compatible."""
+    return config_entry.options.get(
+        CONF_PLAYBACK_MODE,
+        config_entry.data.get(CONF_PLAYBACK_MODE, "cast"),
+    )
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -55,10 +59,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Remove credentials; registered actions remain available with explicit errors."""
-    # Retain saved data while removing runtime states; related: playlist_store.py.
-    playlists = hass.data.get(DOMAIN, {}).get(DATA_PLAYLIST_STORE)
-    if playlists is not None:
-        await playlists.async_clear_states()
     hass.data.pop(DOMAIN, None)
     return True
 

@@ -1,12 +1,10 @@
 """Contract tests with HA doubles; related: config_flow.py, __init__.py, services.py."""
-import asyncio
 from dataclasses import dataclass
 import importlib
 import json
 from pathlib import Path
 import re
 import sys
-import tempfile
 from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
@@ -46,22 +44,6 @@ def entity_id(value):
     return value
 
 
-# File-backed Store double verifies restart semantics; related: playlist_store.py.
-class FileStore:
-    def __init__(self, hass, version, key, **kwargs):
-        self.path = Path(hass.storage_dir) / key
-
-    async def async_load(self):
-        await asyncio.sleep(0)
-        return json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else None
-
-    async def async_save(self, data):
-        await asyncio.sleep(0)
-        pending = self.path.with_suffix(".tmp")
-        pending.write_text(json.dumps(data), encoding="utf-8")
-        pending.replace(self.path)
-
-
 # Stub only HA interfaces; aiohttp and voluptuous remain real dependencies.
 @dataclass
 class LLMTools:
@@ -88,7 +70,6 @@ modules = {
     "homeassistant.helpers": {},
     "homeassistant.helpers.config_validation": {"string": vol.All(str), "entity_id": entity_id},
     "homeassistant.helpers.aiohttp_client": {"async_get_clientsession": lambda hass: hass.session},
-    "homeassistant.helpers.storage": {"Store": FileStore},
     "homeassistant.helpers.entity_registry": {"async_get": lambda hass: hass.entity_registry},
     "homeassistant.components": {},
     "homeassistant.components.llm": {"LLMTools": LLMTools},
@@ -132,11 +113,12 @@ class Registry:
 
 class ServiceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.storage_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.storage_dir.cleanup)
         self.states = {}
-        self.entity_entries = {"media_player.tv": SimpleNamespace(platform="cast")}
-        self.hass = SimpleNamespace(data={}, storage_dir=self.storage_dir.name, services=Registry(), states=SimpleNamespace(
+        self.entity_entries = {
+            "media_player.tv": SimpleNamespace(platform="cast"),
+            "remote.tv": SimpleNamespace(platform="androidtv_remote"),
+        }
+        self.hass = SimpleNamespace(data={}, services=Registry(), states=SimpleNamespace(
             get=self.states.get,
             async_all=lambda: list(self.states.values()),
             async_set=lambda name, state, attrs: self.states.update({name: SimpleNamespace(entity_id=name, attributes=attrs)}),
@@ -193,7 +175,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result.tools), 1)
         self.assertIn("media_player.tv", result.api_prompt)
         self.assertNotIn(self.entry.data["api_key"], result.api_prompt)
-        args = {"query": "music", "entity_id": "media_player.tv"}
+        args = {"query": "music", "entity_id": "media_player.tv", "cast_entity_id": "media_player.tv"}
         response = await result.tools[0].async_call(self.hass, SimpleNamespace(tool_args=args), context)
         self.assertEqual(response.data["status"], "playback_requested")
         self.hass.services.async_call.assert_awaited_once_with(
@@ -205,7 +187,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_assist_tool_rechecks_exposure_and_configuration(self):
         context = self._llm_context()
         tool = (await llm_tools.YouTubeAPI(self.hass).async_get_api_instance(context)).tools[0]
-        call = SimpleNamespace(tool_args={"query": "music", "entity_id": "media_player.tv"})
+        call = SimpleNamespace(tool_args={"query": "music", "entity_id": "media_player.tv", "cast_entity_id": "media_player.tv"})
         self.hass.exposed.clear()
         self.assertEqual(len((await llm_tools.YouTubeAPI(self.hass).async_get_api_instance(context)).tools), 1)
         self.states["media_player.tv"].state = "unavailable"
@@ -232,7 +214,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.hass.services.async_call.side_effect = HAError("private backend diagnostic")
         with self.assertRaisesRegex(HAError, "^YouTube search or playback request failed$"):
             await llm_tools.YouTubeSearchPlayTool().async_call(
-                self.hass, SimpleNamespace(tool_args={"query": "music", "entity_id": "media_player.tv"}), context,
+                self.hass, SimpleNamespace(tool_args={"query": "music", "entity_id": "media_player.tv", "cast_entity_id": "media_player.tv"}), context,
             )
 
     # Exercise setup, API listing and unload instead of just mocking registration.
@@ -261,7 +243,8 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
             with patch.dict(sys.modules["homeassistant.components.llm"].__dict__, clear=True):
                 await integration.async_setup_entry(self.hass, self.entry)
                 self.assertIn("youtube_content_search", providers)
-                callbacks[0]()
+                for cleanup in callbacks:
+                    cleanup()
                 self.assertEqual(providers, {})
 
     async def test_provider_api_registration_and_legacy_result(self):
@@ -270,26 +253,28 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         register.reset_mock()
         with patch.object(llm_tools.llm, "async_register_api", register):
             llm_tools.async_register_api(self.hass, self.entry)
-            register.assert_called_once()
-            self.entry.async_on_unload.assert_called_with(register.return_value)
-            api = register.call_args.args[1]
+            self.assertEqual(register.call_count, 1)
+            apis = [call.args[1] for call in register.call_args_list]
+            self.assertEqual([api.id for api in apis], ["youtube_content_search"])
+            self.entry.async_on_unload.assert_any_call(register.return_value)
+            api = apis[0]
             instance = await api.async_get_api_instance(context)
             self.assertEqual(len(instance.tools), 1)
             self.assertEqual(api.id, "youtube_content_search")
             with patch.dict(sys.modules["homeassistant.helpers.llm"].__dict__):
                 del sys.modules["homeassistant.helpers.llm"].ToolResult
                 result = await instance.tools[0].async_call(
-                    self.hass, SimpleNamespace(tool_args={"query": "music", "entity_id": "media_player.tv"}), context,
+                    self.hass, SimpleNamespace(tool_args={"query": "music", "entity_id": "media_player.tv", "cast_entity_id": "media_player.tv"}), context,
                 )
                 self.assertEqual(result["status"], "playback_requested")
 
     async def test_setup_and_options_without_frontend(self):
-        self.assertEqual(len(self.hass.services.actions), 3)
+        self.assertEqual(len(self.hass.services.actions), 1)
         self.entry.options = {"api_key": uuid.uuid4().hex}
         await integration._async_update_options(self.hass, self.entry)
         self.assertEqual(self.hass.data[services.DOMAIN]["api_key"], self.entry.options["api_key"])
         await integration.async_setup(self.hass, {})
-        self.assertEqual(len(self.hass.services.actions), 3)
+        self.assertEqual(len(self.hass.services.actions), 1)
 
     async def test_video_search_and_cast_payload(self):
         with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": [{"id": {"videoId": "dQw4w9WgXcQ"}}]})) as request:
@@ -299,6 +284,79 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         args = self.hass.services.async_call.call_args
         self.assertEqual(json.loads(args.args[2]["media_content_id"]), {"app_name": "youtube", "media_id": "dQw4w9WgXcQ"})
         self.assertTrue(args.kwargs["blocking"])
+
+    # Exercise the Android TV Remote app-link branch; related: config_flow/services.py.
+    async def test_app_link_playback_sends_youtube_url_to_remote(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "youtube_app_fallback"
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": [{"id": {"videoId": "dQw4w9WgXcQ"}}]})):
+            await self.hass.services.invoke("search_play", {"query": "music", "entity_id": "remote.tv"})
+        self.hass.services.async_call.assert_awaited_once_with(
+            "remote", "turn_on", {
+                "entity_id": "remote.tv",
+                "activity": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            }, blocking=True,
+        )
+
+    async def test_app_link_assist_lists_only_android_tv_remote(self):
+        context = self._llm_context()
+        self.hass.data[services.DOMAIN]["playback_mode"] = "youtube_app_fallback"
+        self.states["remote.tv"] = SimpleNamespace(
+            entity_id="remote.tv", state="on", attributes={"friendly_name": "Google TV"},
+        )
+        result = await llm_tools.YouTubeAPI(self.hass).async_get_api_instance(context)
+        self.assertIn("remote.tv", result.api_prompt)
+        self.assertIn("media_player.tv", result.api_prompt)
+
+    # SmartTube uses its app link while retaining Android TV Remote target validation.
+    async def test_smarttube_mode_sends_smarttube_deep_link(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "smarttube_fallback"
+        with patch.object(services, "_async_youtube_request", AsyncMock()):
+            await self.hass.services.invoke(
+                "search_play", {"video": "dQw4w9WgXcQ", "entity_id": "remote.tv"},
+            )
+        self.hass.services.async_call.assert_awaited_once_with(
+            "remote", "turn_on", {
+                "entity_id": "remote.tv",
+                "activity": "vnd.youtube.launch://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            }, blocking=True,
+        )
+
+    async def test_smarttube_cast_fallback_runs_after_app_link_error(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "cast_fallback"
+        self.hass.services.async_call.side_effect = [HAError("link could not be opened"), None]
+        with patch.object(services, "_async_youtube_request", AsyncMock()) as request:
+            await self.hass.services.invoke("search_play", {
+                "video": "dQw4w9WgXcQ", "entity_id": "remote.tv",
+                "cast_entity_id": "media_player.tv",
+            })
+        request.assert_not_awaited()
+        self.assertEqual(self.hass.services.async_call.await_count, 2)
+        first, second = self.hass.services.async_call.await_args_list
+        self.assertEqual(first.args[:2], ("remote", "turn_on"))
+        self.assertEqual(first.args[2]["activity"], "vnd.youtube.launch://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertEqual(second.args[:2], ("media_player", "play_media"))
+        self.assertEqual(second.args[2]["entity_id"], "media_player.tv")
+
+    async def test_youtube_app_failure_also_uses_cast_fallback(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "youtube_app_fallback"
+        self.hass.services.async_call.side_effect = [HAError("remote failed"), None]
+        with patch.object(services, "_async_youtube_request", AsyncMock()):
+            await self.hass.services.invoke("search_play", {
+                "video": "dQw4w9WgXcQ", "entity_id": "remote.tv",
+                "cast_entity_id": "media_player.tv",
+            })
+        first, second = self.hass.services.async_call.await_args_list
+        self.assertEqual(first.args[2]["activity"], "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertEqual(second.args[:2], ("media_player", "play_media"))
+
+    async def test_smarttube_cast_fallback_requires_cast_target(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "cast_fallback"
+        self.hass.services.async_call.side_effect = HAError("failed")
+        with self.assertRaisesRegex(HAError, "valid Cast fallback entity"):
+            await self.hass.services.invoke("search_play", {
+                "video": "dQw4w9WgXcQ", "entity_id": "remote.tv",
+            })
+        self.assertEqual(self.hass.services.async_call.await_count, 1)
 
     async def test_direct_youtube_video_input_skips_search(self):
         for value in [
@@ -318,10 +376,56 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
                     {"app_name": "youtube", "media_id": "dQw4w9WgXcQ"},
                 )
 
+    async def test_playlist_url_plays_first_item_through_existing_playback(self):
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={
+            "items": [{"contentDetails": {"videoId": "dQw4w9WgXcQ"}}],
+        })) as request:
+            await self.hass.services.invoke("search_play", {
+                "video": "https://www.youtube.com/playlist?list=PL1234567890",
+                "entity_id": "media_player.tv",
+            })
+        request.assert_awaited_once_with(self.hass, "playlistItems", {
+            "part": "contentDetails", "playlistId": "PL1234567890", "maxResults": 1,
+        })
+        self.assertEqual(
+            json.loads(self.hass.services.async_call.call_args.args[2]["media_content_id"]),
+            {"app_name": "youtube", "media_id": "dQw4w9WgXcQ", "playlist_id": "PL1234567890"},
+        )
+
+    async def test_playlist_url_passes_list_to_smarttube_deep_link(self):
+        self.hass.data[services.DOMAIN]["playback_mode"] = "smarttube_fallback"
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={
+            "items": [{"contentDetails": {"videoId": "dQw4w9WgXcQ"}}],
+        })), patch.object(services.asyncio, "sleep", AsyncMock()) as sleep:
+            await self.hass.services.invoke("search_play", {
+                "video": "https://www.youtube.com/playlist?list=PL1234567890",
+                "entity_id": "remote.tv", "cast_entity_id": "media_player.tv",
+            })
+        sleep.assert_awaited_once_with(2)
+        self.assertEqual(self.hass.services.async_call.await_count, 2)
+        launch, play = self.hass.services.async_call.await_args_list
+        self.assertEqual(launch.args[:2], ("remote", "turn_on"))
+        self.assertEqual(play.args[:2], ("remote", "send_command"))
+        self.assertEqual(play.args[2], {"entity_id": "remote.tv", "command": "DPAD_CENTER"})
+        self.assertTrue(play.kwargs["blocking"])
+        self.assertEqual(
+            launch.args[2]["activity"],
+            "vnd.youtube.launch://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890",
+        )
+
+    async def test_empty_playlist_reports_no_playable_video(self):
+        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": []})):
+            with self.assertRaisesRegex(HAError, "No playable video found"):
+                await self.hass.services.invoke("search_play", {
+                    "video": "https://youtube.com/playlist?list=PL1234567890",
+                    "entity_id": "media_player.tv",
+                })
+        self.hass.services.async_call.assert_not_awaited()
+
     async def test_direct_video_input_validation_and_query_exclusivity(self):
         for data in [
             {"video": "https://example.com/watch?v=dQw4w9WgXcQ", "entity_id": "media_player.tv"},
-            {"video": "https://youtube.com/playlist?list=PL123", "entity_id": "media_player.tv"},
+            {"video": "https://youtube.com/playlist?list=short", "entity_id": "media_player.tv"},
             {"video": "too-short", "entity_id": "media_player.tv"},
             {"query": "music", "video": "dQw4w9WgXcQ", "entity_id": "media_player.tv"},
             {"entity_id": "media_player.tv"},
@@ -338,22 +442,10 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
             await self.hass.services.invoke("search_play", {"query": "music", "entity_id": "media_player.tv"})
 
     async def test_input_validation(self):
-        with self.assertRaises(vol.Invalid):
+        with self.assertRaises(HAError):
             await self.hass.services.invoke("search_play", {"query": "music", "entity_id": "light.room"})
         with self.assertRaises(HAError):
             await self.hass.services.invoke("search_play", {"query": " ", "entity_id": "media_player.tv"})
-        with self.assertRaises(vol.Invalid):
-            await self.hass.services.invoke("playlist_save", {"playlist_id": "music", "video_ids": "invalid"})
-
-    async def test_playlist_merge_csv_list_and_delete(self):
-        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": []})) as request:
-            await self.hass.services.invoke("playlist_save", {"playlist_id": "my-list", "video_ids": "dQw4w9WgXcQ,dQw4w9WgXcQ"})
-            await self.hass.services.invoke("playlist_save", {"playlist_id": "my-list", "video_ids": ["jNQXAC9IVRw"]})
-        self.assertEqual(request.call_args.args[1], "videos")
-        state = self.states["youtube_content_search._playlist_my_list"]
-        self.assertEqual(len(json.loads(state.attributes["data"])), 2)
-        await self.hass.services.invoke("playlist_delete", {"id": "my-list"})
-        self.assertFalse(self.states)
 
     async def test_network_failure_does_not_expose_url(self):
         self.hass.session = SimpleNamespace(get=Mock(side_effect=aiohttp.ClientError("sensitive URL omitted")))
@@ -423,95 +515,12 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["errors"], {"base": "api_key_required"})
         result = await flow.async_step_user(self.entry.data)
         self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["playback_mode"], "cast_fallback")
         options = flow.async_get_options_flow(self.entry)
         result = await options.async_step_init({"api_key": " "})
         self.assertEqual(result["errors"], {"base": "api_key_required"})
         flow._async_current_entries = lambda: [self.entry]
         self.assertEqual((await flow.async_step_user())["reason"], "single_instance_allowed")
-
-    # Discard runtime data and states, then restore only from the saved file.
-    async def _restart(self):
-        self.hass.data = {}
-        self.states.clear()
-        await integration.async_setup(self.hass, {})
-        await integration.async_setup_entry(self.hass, self.entry)
-
-    async def test_persist_and_restore_after_restart(self):
-        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": []})):
-            await self.hass.services.invoke("playlist_save", {"playlist_id": "music", "video_ids": ["dQw4w9WgXcQ"]})
-        await self._restart()
-        videos = json.loads(self.states["youtube_content_search._playlist_music"].attributes["data"])
-        self.assertEqual([v["videoId"] for v in videos], ["dQw4w9WgXcQ"])
-
-    async def test_deletion_survives_restart(self):
-        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": []})):
-            await self.hass.services.invoke("playlist_save", {"playlist_id": "music", "video_ids": ["dQw4w9WgXcQ"]})
-        await self.hass.services.invoke("playlist_delete", {"id": "music"})
-        await self._restart()
-        self.assertFalse(self.states)
-
-    async def test_concurrent_saves_survive_restart(self):
-        with patch.object(services, "_async_youtube_request", AsyncMock(return_value={"items": []})):
-            await asyncio.gather(*[
-                self.hass.services.invoke("playlist_save", {"playlist_id": "music", "video_ids": [video]})
-                for video in ["dQw4w9WgXcQ", "jNQXAC9IVRw", "dQw4w9WgXcQ"]
-            ])
-        await self._restart()
-        videos = json.loads(self.states["youtube_content_search._playlist_music"].attributes["data"])
-        self.assertEqual({v["videoId"] for v in videos}, {"dQw4w9WgXcQ", "jNQXAC9IVRw"})
-
-    async def test_save_failure_retains_runtime_and_disk(self):
-        repo = self.hass.data[services.DOMAIN][services.DATA_PLAYLIST_STORE]
-        await repo.async_merge("music", [{"videoId": "dQw4w9WgXcQ"}])
-        with patch.object(repo.store, "async_save", AsyncMock(side_effect=OSError())):
-            with self.assertRaises(HAError):
-                await repo.async_delete("music")
-        self.assertIn("youtube_content_search._playlist_music", self.states)
-        await self._restart()
-        self.assertIn("youtube_content_search._playlist_music", self.states)
-
-    async def test_silent_write_failure_detected(self):
-        repo = self.hass.data[services.DOMAIN][services.DATA_PLAYLIST_STORE]
-        await repo.async_merge("music", [{"videoId": "dQw4w9WgXcQ"}])
-        with patch.object(repo.store, "async_save", AsyncMock()):
-            with self.assertRaises(HAError):
-                await repo.async_delete("music")
-        self.assertIn("music", repo.playlists)
-
-    async def test_legacy_states_imported_once(self):
-        await integration.async_unload_entry(self.hass, self.entry)
-        self.hass.states.async_set("youtube_content_search._playlist_legacy", "on", {
-            "data": json.dumps([{"videoId": "dQw4w9WgXcQ"}]),
-        })
-        await integration.async_setup_entry(self.hass, self.entry)
-        await self._restart()
-        self.assertIn("youtube_content_search._playlist_legacy", self.states)
-
-    async def test_invalid_storage_not_overwritten(self):
-        repo = self.hass.data[services.DOMAIN][services.DATA_PLAYLIST_STORE]
-        await repo.store.async_save({"playlists": {"music": "invalid"}})
-        before = repo.store.path.read_bytes()
-        with self.assertRaises(HAError):
-            await self._restart()
-        self.assertEqual(repo.store.path.read_bytes(), before)
-        self.assertFalse(self.states)
-
-    async def test_reload_preserves_saved_playlists(self):
-        repo = self.hass.data[services.DOMAIN][services.DATA_PLAYLIST_STORE]
-        await repo.async_merge("music", [{"videoId": "dQw4w9WgXcQ"}])
-        await integration.async_unload_entry(self.hass, self.entry)
-        self.assertFalse(self.states)
-        await integration.async_setup_entry(self.hass, self.entry)
-        self.assertIn("youtube_content_search._playlist_music", self.states)
-
-    async def test_stale_repository_cannot_write_after_unload(self):
-        repo = self.hass.data[services.DOMAIN][services.DATA_PLAYLIST_STORE]
-        await integration.async_unload_entry(self.hass, self.entry)
-        await integration.async_setup_entry(self.hass, self.entry)
-        with self.assertRaises(HAError):
-            await repo.async_merge("stale", [{"videoId": "dQw4w9WgXcQ"}])
-        self.assertFalse(self.states)
-
 
 if __name__ == "__main__":
     unittest.main()

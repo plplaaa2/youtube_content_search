@@ -76,11 +76,6 @@ class YouTubeContentSearchPanel extends HTMLElement {
 
             .empty-state { display: flex; align-items: center; justify-content: center; padding: 80px 20px; text-align: center; color: var(--text-secondary, #aaaaaa); font-size: 15px; }
 
-            /* Playlist */
-            .playlists-list { display: grid; gap: 16px; }
-            .playlist-item { background: var(--card-surface, #1e1e1e); border-radius: 10px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all .2s; }
-            .playlist-item:hover { background: rgba(255,255,255,.08); }
-
             /* Settings */
             .setting-group { background: var(--card-surface, #1e1e1e); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
             .input-field { background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.12); color: #fff; padding: 10px 14px; border-radius: 8px; width: 100%; font-size: 14px; outline: none; transition: border-color .2s; }
@@ -123,7 +118,6 @@ class YouTubeContentSearchPanel extends HTMLElement {
         this._emptyState = root.querySelector('#empty-state');
         this._videoGrid = root.querySelector('#video-grid');
         this._playerArea = root.querySelector('#player-area');
-        this._playlistsList = root.querySelector('#playlists-list');
         this._settingsForm = root.querySelector('#settings-form');
         this._toastContainer = root.querySelector('#toast-container');
 
@@ -174,8 +168,6 @@ class YouTubeContentSearchPanel extends HTMLElement {
 
         if (tabId === 'settings') {
             this.showSettingsView();
-        } else if (tabId === 'playlist') {
-            this.showPlaylistView();
         }
     }
 
@@ -232,34 +224,6 @@ class YouTubeContentSearchPanel extends HTMLElement {
             </div>`;
         this._playerArea.classList.remove('hidden');
 
-        // Reset playlist selection when playing
-        window.__yocsPanel.selectedPlaylistId = null;
-    }
-
-    showOpenPlaylistModal() {
-        const modalInner = this._root.querySelector('#playlist-modal .modal');
-        if (!modalInner) return;
-
-        let html = '<ul class="playlist-item">';
-        
-        // Show existing playlists or empty state
-        if (Object.keys(window.__yocsPanel.playlists || {}).length === 0) {
-            html += '<li style="padding:16px;color:#aaa;text-align:center;">저장된 플레이리스트가 없습니다.</li>';
-        } else {
-            const playlistIds = Object.keys(window.__yocsPanel.playlists);
-            playlistIds.forEach(pid => {
-                const count = Array.isArray(window.__yocsPanel.playlists[pid]) ? window.__yocsPanel.playlists[pid].length : 0;
-                html += `<li onclick="window.__yocsPanel.selectPlaylist('${pid}','${this._escapeHtml(typeof window.__yocsPanel.playlists[pid] === 'string' ? window.__yocsPanel.playlists[pid] : (window.__yocsPanel.playlists[pid]?.name || pid))}')" style="cursor:pointer;display:flex;align-items:center;padding:10px 8px;">📋 ${this._escapeHtml(typeof window.__yocsPanel.playlists[pid] === 'string' ? window.__yocsPanel.playlists[pid] : (window.__yocsPanel.playlists[pid]?.name || pid))} (${count})</li>`;
-            });
-        }
-        
-        html += '</ul>';
-        modalInner.innerHTML = html;
-        modalInner.parentElement.classList.remove('hidden');
-    }
-
-    selectPlaylist(pid, name) {
-        window.__yocsPanel.selectedPlaylistId = pid;
     }
 
     showSettingsView() {
