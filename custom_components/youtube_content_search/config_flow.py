@@ -1,7 +1,11 @@
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from .const import DOMAIN, CONF_API_KEY
+from .const import (
+    CONF_API_KEY, CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE, DOMAIN,
+    PLAYBACK_MODE_APP_LINKS, PLAYBACK_MODE_CAST, PLAYBACK_MODE_CAST_FALLBACK, PLAYBACK_MODE_SMARTTUBE,
+    PLAYBACK_MODE_YOUTUBE_APP,
+)
 
 # Config Flow: 최초 등록 시 API 키 입력
 class YouTubeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -16,11 +20,23 @@ class YouTubeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             api_key = user_input.get(CONF_API_KEY, "").strip()
             if api_key:
-                return self.async_create_entry(title="YouTube Search", data={CONF_API_KEY: api_key})
+                return self.async_create_entry(title="YouTube Search", data={
+                    CONF_API_KEY: api_key,
+                    CONF_PLAYBACK_MODE: user_input.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE)
+                    if user_input.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE) in {
+                        PLAYBACK_MODE_CAST, *PLAYBACK_MODE_APP_LINKS,
+                    } else DEFAULT_PLAYBACK_MODE,
+                })
             errors["base"] = "api_key_required"
 
         schema = vol.Schema({
-            vol.Required(CONF_API_KEY): str
+            vol.Required(CONF_API_KEY): str,
+            vol.Required(CONF_PLAYBACK_MODE, default=DEFAULT_PLAYBACK_MODE): vol.In({
+                PLAYBACK_MODE_CAST_FALLBACK: "SmartTube → Cast fallback (기존 옵션)",
+                PLAYBACK_MODE_CAST: "Google Cast만",
+                PLAYBACK_MODE_YOUTUBE_APP: "공식 YouTube 앱 → Cast fallback",
+                PLAYBACK_MODE_SMARTTUBE: "SmartTube → Cast fallback",
+            }),
         })
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
@@ -41,15 +57,41 @@ class YouTubeOptionsFlowHandler(config_entries.OptionsFlow):
         # Apply options through the entry listener; related: __init__.py.
         errors = {}
         if user_input is not None:
-            api_key = user_input.get(CONF_API_KEY, "").strip()
+            api_key = user_input.get(CONF_API_KEY, self._entry.options.get(
+                CONF_API_KEY, self._entry.data.get(CONF_API_KEY, "")
+            )).strip()
             if api_key:
-                return self.async_create_entry(title="", data={CONF_API_KEY: api_key})
+                return self.async_create_entry(title="", data={
+                    CONF_API_KEY: api_key,
+                    CONF_PLAYBACK_MODE: user_input.get(
+                        CONF_PLAYBACK_MODE,
+                        self._entry.options.get(
+                            CONF_PLAYBACK_MODE,
+                            self._entry.data.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
+                        ),
+                    ) if user_input.get(CONF_PLAYBACK_MODE, self._entry.options.get(
+                        CONF_PLAYBACK_MODE,
+                        self._entry.data.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
+                    )) in {PLAYBACK_MODE_CAST, *PLAYBACK_MODE_APP_LINKS} else DEFAULT_PLAYBACK_MODE,
+                })
             errors["base"] = "api_key_required"
 
         schema = vol.Schema({
-            vol.Required(
+            vol.Optional(
                 CONF_API_KEY,
                 default=self._entry.options.get(CONF_API_KEY, self._entry.data.get(CONF_API_KEY, ""))
-            ): str
+            ): str,
+            vol.Required(
+                CONF_PLAYBACK_MODE,
+                default=self._entry.options.get(
+                    CONF_PLAYBACK_MODE,
+                    self._entry.data.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
+                ),
+            ): vol.In({
+                PLAYBACK_MODE_CAST_FALLBACK: "SmartTube → Cast fallback (기존 옵션)",
+                PLAYBACK_MODE_CAST: "Google Cast만",
+                PLAYBACK_MODE_YOUTUBE_APP: "공식 YouTube 앱 → Cast fallback",
+                PLAYBACK_MODE_SMARTTUBE: "SmartTube → Cast fallback",
+            }),
         })
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
